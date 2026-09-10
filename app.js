@@ -187,11 +187,30 @@ function handleFile(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
-    const dataUrl = reader.result;
-    pickedImageMime = file.type || "image/jpeg";
-    pickedImageBase64 = dataUrl.split(",")[1];
-    $("scan-preview").src = dataUrl;
-    hide("scan-drop"); show("scan-preview-wrap");
+    const img = new Image();
+    img.onload = () => {
+      // Shrink large camera photos before sending — a full-size 4000px+
+      // phone photo can take minutes to upload on a weak connection and
+      // time out. 1600px on the long side is still plenty sharp for reading
+      // invoice text, and uploads in a few seconds instead.
+      const MAX_DIM = 1600;
+      let { width, height } = img;
+      if (width > MAX_DIM || height > MAX_DIM) {
+        const scale = MAX_DIM / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      pickedImageMime = "image/jpeg";
+      pickedImageBase64 = dataUrl.split(",")[1];
+      $("scan-preview").src = dataUrl;
+      hide("scan-drop"); show("scan-preview-wrap");
+    };
+    img.onerror = () => { $("scan-error").textContent = "Couldn't load that image. Try a different one."; };
+    img.src = reader.result;
   };
   reader.readAsDataURL(file);
 }
@@ -239,23 +258,34 @@ async function callVisionModel(base64, mime) {
   if (!key || key.startsWith("PASTE_")) {
     throw new Error("Add your OpenRouter key in Settings first");
   }
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${key}`
-    },
-    body: JSON.stringify({
-      model: VISION_MODEL,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "text", text: EXTRACTION_PROMPT },
-          { type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } }
-        ]
-      }]
-    })
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+  let res;
+  try {
+    res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model: VISION_MODEL,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: EXTRACTION_PROMPT },
+            { type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } }
+          ]
+        }]
+      })
+    });
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("Took too long to respond (45s) — try again");
+    throw new Error("Couldn't reach the AI — check your connection and try again");
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!res.ok) throw new Error(`AI request failed (${res.status})`);
   const data = await res.json();
   let text = data.choices?.[0]?.message?.content || "";
