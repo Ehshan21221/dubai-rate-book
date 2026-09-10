@@ -95,7 +95,22 @@ async function loadSettings() {
   $("settings-rate").value = exchangeRate;
   updateExchangeNote();
 }
-$("btn-settings").addEventListener("click", () => { $("settings-rate").value = exchangeRate; switchView("view-settings"); });
+function getOpenRouterKey() {
+  return localStorage.getItem("openrouterKey") || OPENROUTER_API_KEY || "";
+}
+
+$("btn-settings").addEventListener("click", () => {
+  $("settings-rate").value = exchangeRate;
+  $("settings-orkey").value = localStorage.getItem("openrouterKey") || "";
+  switchView("view-settings");
+});
+$("btn-save-orkey").addEventListener("click", () => {
+  const val = $("settings-orkey").value.trim();
+  if (!val) { toast("Enter a key first"); return; }
+  localStorage.setItem("openrouterKey", val);
+  show("orkey-saved");
+  setTimeout(() => hide("orkey-saved"), 1800);
+});
 $("btn-settings-back").addEventListener("click", () => switchView("view-home"));
 $("btn-save-rate").addEventListener("click", async () => {
   const val = parseFloat($("settings-rate").value);
@@ -189,12 +204,16 @@ async function analyzeInvoice() {
   $("scan-error").textContent = "";
   try {
     const extracted = await extractInvoiceWithAI(pickedImageBase64, pickedImageMime);
+    if (!extracted.items || extracted.items.length === 0) {
+      hide("scan-loading"); show("scan-preview-wrap");
+      $("scan-error").textContent = "Couldn't find any items on that invoice. Try a clearer, well-lit photo, or a different angle.";
+      return;
+    }
     await openReviewFromExtraction(extracted);
   } catch (err) {
     console.error(err);
     hide("scan-loading"); show("scan-preview-wrap");
-    $("scan-error").textContent = "Couldn't read that invoice (" + (err.message || "unknown error") + "). Try a clearer photo, or add items manually below.";
-    await openReviewFromExtraction({ company: "", items: [] });
+    $("scan-error").textContent = "Couldn't read that invoice: " + (err.message || "unknown error") + ". Try again, or try a clearer photo.";
   }
 }
 
@@ -216,14 +235,15 @@ Rules:
 - Output valid JSON only.`;
 
 async function extractInvoiceWithAI(base64, mime) {
-  if (!OPENROUTER_API_KEY || OPENROUTER_API_KEY.startsWith("PASTE_")) {
-    throw new Error("OpenRouter API key isn't set up yet in firebase-config.js");
+  const key = getOpenRouterKey();
+  if (!key || key.startsWith("PASTE_")) {
+    throw new Error("Add your OpenRouter key in Settings first");
   }
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${OPENROUTER_API_KEY}`
+      "Authorization": `Bearer ${key}`
     },
     body: JSON.stringify({
       model: VISION_MODEL,

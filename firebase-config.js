@@ -13,5 +13,5 @@ export const firebaseConfig = {
 
 // OpenRouter: same key you used for Fustan AI. Get one free at
 // https://openrouter.ai/keys if you need a fresh one.
-export const OPENROUTER_API_KEY = "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";
-export const VISION_MODEL = "google/gemini-2.0-flash-exp:free";
+export const OPENROUTER_API_KEY = "PASTE_YOUR_OPENROUTER_KEY";
+export const VISION_MODEL = "openrouter/free";

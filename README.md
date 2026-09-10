@@ -38,15 +38,19 @@ Inventory PWA already use):
   other apps' collections, then **Publish**.
 
 ### 2. OpenRouter (the AI that reads invoices)
-- Use the same OpenRouter API key you already set up for Fustan AI, or
-  get a free one at https://openrouter.ai/keys
-- Paste it into `firebase-config.js` as `OPENROUTER_API_KEY`.
-- The free Gemini model is already selected — no cost as long as you
-  stay on the free tier.
+Get a free key at https://openrouter.ai/keys — **don't** put it in
+`firebase-config.js`. Instead, open the live app once it's deployed,
+go to **Settings**, and paste it into the "OpenRouter API key" field
+there. It's saved only in your phone's browser storage, never
+committed to GitHub — so it can never get caught by a secret scanner
+or auto-disabled, and your repo can stay public (required for free
+GitHub Pages hosting) with zero risk to the key.
+- The model is set to `openrouter/free`, OpenRouter's auto-router — it
+  picks whichever free model currently supports image reading, since
+  the free-model lineup on OpenRouter changes often. No cost either way.
 
 ### 3. Exchange rate
-First time you open the app, go to **Settings** (gear icon, top right
-of the Companies screen) and set your AED → OMR rate. You can change
+Same **Settings** screen — set your AED → OMR rate. You can change
 it anytime — it only affects new saves, not past records.
 
 ## Deploy from Termux
@@ -95,3 +99,9 @@ Branch: main → Save**. Your app will be live at
   which you're skipping for now. Everything else (scanning, rates,
   selling price tiers) works fully on the free plan. Add photos later
   by upgrading the project and asking me to bring that feature back.
+- Your OpenRouter key lives only in this browser's storage (not in
+  the code, not on GitHub). If you ever clear Chrome's site data for
+  this app, or open it in a different browser, you'll need to paste
+  the key into Settings again — it's a one-time re-entry, not a
+  repeated hassle, and it means the key is never at risk of being
+  auto-disabled again.
