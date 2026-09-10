@@ -242,9 +242,12 @@ Return ONLY raw JSON (no markdown fences, no commentary) in exactly this shape:
 {"company": "<supplier/company name as printed on invoice, best guess>", "items": [{"name": "<item name/description as printed>", "rate": <number, per-unit price in AED as a plain number>, "unit": "Meter" | "Yard" | "Piece" | "Roll", "qty": <number or null if not visible>}]}
 
 Rules:
-- "rate" is the PER-UNIT price in AED (UAE Dirham), not the line total.
-- If the invoice shows BOTH a VAT-excluded rate and a VAT-included rate (columns like "Rate Excl VAT" / "Rate Incl VAT", or "Price" / "Price Incl VAT"), use the VAT-INCLUDED rate — that's the real cost per unit. If only one rate column exists, use that.
-- If only a line total and quantity are printed, divide total by quantity to get the per-unit rate.
+- "rate" is the true PER-UNIT cost in AED (UAE Dirham) — what he actually ends up paying per unit, VAT included, not the line total.
+- **How to get the right rate — in this priority order:**
+  1. If a line total INCLUDING VAT is printed (column like "Total Amt withVat", "Amount Incl.Vat", "Amount incl VAT", "Gross Amt") — ALWAYS compute rate = that total ÷ quantity. Do this even if the row also shows a separate "Rate" or "Price" column, because that column is very often the pre-tax rate and would undercount the real cost. The line total is the most trustworthy number on the invoice.
+  2. Only if no such VAT-included total is printed for the line, fall back to a "Rate Incl VAT" / "Price Incl VAT" column if one exists.
+  3. Only if neither of the above exists, use a plain "Rate" / "Price" column as-is.
+- If only a line total and quantity are printed (no rate column at all), divide total by quantity to get the per-unit rate — same idea as rule 1.
 - Most of these invoices measure cloth in Meters (column labeled "Mtr", "Meters", "MTR") — use "Meter" as the unit in that case. Only use "Yard" if the invoice itself says yards. Use "Piece" or "Roll" only if the invoice is clearly priced that way instead of by length.
 - Handwritten invoices sometimes write decimals with a dash or slash instead of a dot — e.g. "2-00" means 2.00, "22/86" means 22.86. Interpret these as decimals.
 - Keep item names close to the invoice wording. You can drop stock/design codes (like "BR/5520") from the name — the description alone is enough.
@@ -392,7 +395,7 @@ function renderReviewRows() {
     card.className = "item-card";
     const isExisting = !!row.matchedItemId;
     card.innerHTML = `
-      <span class="item-match-badge ${isExisting ? "existing" : "new"}">${isExisting ? "Existing — rate will update" : "New item"}</span>
+      <span class="item-match-badge ${isExisting ? "existing" : "new"}" data-badge>${isExisting ? "Existing — rate will update" : "New item"}</span>
       <div class="item-card-top">
         <input type="text" list="${dlId}" placeholder="Item name" value="${escapeHtml(row.name)}" data-field="name" />
       </div>
@@ -416,21 +419,32 @@ function renderReviewRows() {
         <span>Oman selling price</span>
         <strong data-omr>${fmtMoney(computeOMR(row))} OMR</strong>
       </div>
-      ${isExisting && row.matchedHistory ? `<p class="hint-text" style="margin:8px 0 0">Previous rate: ${fmtMoney(row.matchedHistory.currentRateAED, 2)} AED</p>` : ""}
+      <p class="hint-text" style="margin:8px 0 0" data-prev-rate>${isExisting && row.matchedHistory ? `Previous rate: ${fmtMoney(row.matchedHistory.currentRateAED, 2)} AED` : ""}</p>
       <button class="item-card-remove" data-remove>Remove item</button>
     `;
-    card.querySelectorAll("input, select").forEach((inp) => {
+    const nameInput = card.querySelector('[data-field="name"]');
+    const badgeEl = card.querySelector('[data-badge]');
+    const prevRateEl = card.querySelector('[data-prev-rate]');
+
+    nameInput.addEventListener("input", () => {
+      // Update the row and re-check for a matching existing item WITHOUT
+      // rebuilding the input itself — rebuilding mid-typing steals focus
+      // and closes the on-screen keyboard on mobile.
+      row.name = nameInput.value;
+      const match = currentCompanyItemsCache.find((it) => it.nameLower === row.name.trim().toLowerCase());
+      row.matchedItemId = match ? match.id : null;
+      row.matchedHistory = match || null;
+      if (match && match.boughtUnit) row.boughtUnit = match.boughtUnit;
+      const isNowExisting = !!row.matchedItemId;
+      badgeEl.textContent = isNowExisting ? "Existing — rate will update" : "New item";
+      badgeEl.className = `item-match-badge ${isNowExisting ? "existing" : "new"}`;
+      prevRateEl.textContent = isNowExisting && row.matchedHistory ? `Previous rate: ${fmtMoney(row.matchedHistory.currentRateAED, 2)} AED` : "";
+    });
+
+    card.querySelectorAll('input:not([data-field="name"]), select').forEach((inp) => {
       inp.addEventListener("input", () => {
         const field = inp.dataset.field;
-        row[field] = (field === "name" || field === "boughtUnit") ? inp.value : parseFloat(inp.value) || 0;
-        if (field === "name") {
-          const match = currentCompanyItemsCache.find((it) => it.nameLower === row.name.trim().toLowerCase());
-          row.matchedItemId = match ? match.id : null;
-          row.matchedHistory = match || null;
-          if (match && match.boughtUnit) row.boughtUnit = match.boughtUnit;
-          renderReviewRows();
-          return;
-        }
+        row[field] = field === "boughtUnit" ? inp.value : (parseFloat(inp.value) || 0);
         card.querySelector("[data-omr]").textContent = fmtMoney(computeOMR(row)) + " OMR";
       });
     });
@@ -479,20 +493,29 @@ async function saveReview() {
       if (itemRef) {
         const prevSnap = await getDoc(itemRef);
         const prev = prevSnap.exists() ? prevSnap.data() : null;
-        const history = prev?.history ? [...prev.history] : [];
-        if (prev && typeof prev.currentRateAED === "number") {
-          history.unshift({ rateAED: prev.currentRateAED, date: prev.lastUpdated || Timestamp.now() });
+        const rateUnchanged = prev && prev.currentRateAED === row.rateAED && (prev.boughtUnit || "Meter") === row.boughtUnit;
+        if (rateUnchanged) {
+          // Same item, same rate as last time — nothing worth re-saving or
+          // logging as a "change" in history. Just keep the name in sync.
+          if (prev.name !== row.name.trim()) {
+            await updateDoc(itemRef, { name: row.name.trim(), nameLower });
+          }
+        } else {
+          const history = prev?.history ? [...prev.history] : [];
+          if (prev && typeof prev.currentRateAED === "number") {
+            history.unshift({ rateAED: prev.currentRateAED, date: prev.lastUpdated || Timestamp.now() });
+          }
+          await updateDoc(itemRef, {
+            name: row.name.trim(),
+            nameLower,
+            currentRateAED: row.rateAED,
+            boughtUnit: row.boughtUnit,
+            marginOMR: row.margin,
+            sellingPriceOMR,
+            lastUpdated: serverTimestamp(),
+            history: history.slice(0, 20)
+          });
         }
-        await updateDoc(itemRef, {
-          name: row.name.trim(),
-          nameLower,
-          currentRateAED: row.rateAED,
-          boughtUnit: row.boughtUnit,
-          marginOMR: row.margin,
-          sellingPriceOMR,
-          lastUpdated: serverTimestamp(),
-          history: history.slice(0, 20)
-        });
       } else {
         await addDoc(itemsCol, {
           name: row.name.trim(),
@@ -588,10 +611,12 @@ function firstTierSummary(it) {
 
 function openItemDetail(item) {
   detailItem = item;
-  $("history-item-name").textContent = item.name;
+  $("detail-item-name").value = item.name;
 
   // buy rate
-  $("detail-buy-rate").textContent = `${fmtMoney(item.currentRateAED, 2)} AED / ${item.boughtUnit || "Meter"} — last updated ${dateStr(item.lastUpdated)}`;
+  $("detail-rate-input").value = item.currentRateAED || "";
+  $("detail-rate-unit").value = item.boughtUnit || "Meter";
+  $("detail-buy-updated").textContent = `Last updated ${dateStr(item.lastUpdated)}`;
 
   // roll note
   $("detail-roll-note").value = item.rollNote || "";
@@ -631,7 +656,15 @@ $("btn-save-tiers").addEventListener("click", async () => {
   btn.disabled = true; btn.textContent = "Saving…";
   try {
     const itemRef = doc(db, "companies", currentCompanyId, "items", detailItem.id);
-    const updates = { rollNote: $("detail-roll-note").value.trim() };
+    const newName = $("detail-item-name").value.trim() || detailItem.name;
+    const newRate = parseFloat($("detail-rate-input").value) || 0;
+    const newUnit = $("detail-rate-unit").value;
+
+    const updates = {
+      name: newName,
+      nameLower: newName.toLowerCase(),
+      rollNote: $("detail-roll-note").value.trim()
+    };
 
     const sellPrices = {};
     $("tier-rows").querySelectorAll(".tier-row").forEach((row) => {
@@ -642,7 +675,21 @@ $("btn-save-tiers").addEventListener("click", async () => {
     });
     updates.sellPrices = sellPrices;
 
+    // Only touch the rate/history/lastUpdated if the buying rate actually
+    // changed here — editing just the name or selling prices shouldn't
+    // create a fake "rate changed today" entry in the history.
+    const rateChanged = newRate !== detailItem.currentRateAED || newUnit !== (detailItem.boughtUnit || "Meter");
+    if (rateChanged) {
+      const history = detailItem.history ? [...detailItem.history] : [];
+      history.unshift({ rateAED: detailItem.currentRateAED, date: detailItem.lastUpdated || Timestamp.now() });
+      updates.currentRateAED = newRate;
+      updates.boughtUnit = newUnit;
+      updates.lastUpdated = serverTimestamp();
+      updates.history = history.slice(0, 20);
+    }
+
     await updateDoc(itemRef, updates);
+    detailItem = { ...detailItem, ...updates, name: newName, currentRateAED: newRate, boughtUnit: newUnit };
     show("detail-save-status");
     setTimeout(() => hide("detail-save-status"), 1800);
   } catch (err) {
@@ -650,7 +697,7 @@ $("btn-save-tiers").addEventListener("click", async () => {
     $("detail-save-status").textContent = "Couldn't save: " + err.message;
     show("detail-save-status");
   } finally {
-    btn.disabled = false; btn.textContent = "Save selling prices";
+    btn.disabled = false; btn.textContent = "Save changes";
   }
 });
 

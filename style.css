@@ -406,10 +406,41 @@ h1, h2 {
   border-radius: 16px 16px 0 0;
   padding: 20px 18px max(20px, env(safe-area-inset-bottom));
 }
-.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; }
+.detail-name-input {
+  flex: 1;
+  font-family: 'Lora', serif;
+  font-weight: 600;
+  font-size: 1.25rem;
+  color: var(--ink);
+  border: none;
+  background: transparent;
+  padding: 4px 0;
+  border-bottom: 1.5px solid transparent;
+}
+.detail-name-input:focus { border-bottom-color: var(--pine); outline: none; }
 .detail-divider { height: 1px; background: var(--line); margin: 18px 0; }
 
-.detail-buy-rate { font-variant-numeric: tabular-nums; font-size: 1rem; margin: 2px 0 0; }
+.detail-rate-row { display: flex; gap: 8px; }
+.detail-rate-row input {
+  flex: 1;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--paper-raised);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.detail-rate-row select {
+  flex: 0.8;
+  padding: 12px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--paper-raised);
+  font-size: 0.95rem;
+  color: var(--ink);
+}
 
 .tier-rows { display: flex; flex-direction: column; gap: 10px; }
 .tier-row {

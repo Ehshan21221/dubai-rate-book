@@ -123,14 +123,23 @@
 <div id="modal-history" class="modal hidden">
   <div class="modal-card">
     <div class="modal-head">
-      <h2 id="history-item-name">Item</h2>
+      <input id="detail-item-name" class="detail-name-input" type="text" placeholder="Item name" />
       <button id="btn-close-history" class="icon-btn">✕</button>
     </div>
 
     <div class="detail-divider"></div>
 
     <p class="field-label">Buying rate</p>
-    <p id="detail-buy-rate" class="detail-buy-rate"></p>
+    <div class="detail-rate-row">
+      <input id="detail-rate-input" type="number" step="0.01" inputmode="decimal" />
+      <select id="detail-rate-unit">
+        <option value="Meter">Meter</option>
+        <option value="Yard">Yard</option>
+        <option value="Piece">Piece</option>
+        <option value="Roll">Roll</option>
+      </select>
+    </div>
+    <p id="detail-buy-updated" class="hint-text"></p>
 
     <div class="detail-divider"></div>
 
@@ -139,7 +148,7 @@
     <div id="tier-rows" class="tier-rows"></div>
     <label class="field-label" style="margin-top:14px">Roll size note (optional)</label>
     <input id="detail-roll-note" type="text" placeholder="e.g. usually 25–30 yards, varies by shipment" />
-    <button id="btn-save-tiers" class="btn-primary btn-wide" style="margin-top:14px">Save selling prices</button>
+    <button id="btn-save-tiers" class="btn-primary btn-wide" style="margin-top:14px">Save changes</button>
     <p id="detail-save-status" class="hint-text success-text hidden">Saved.</p>
 
     <div class="detail-divider"></div>
