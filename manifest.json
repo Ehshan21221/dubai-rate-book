@@ -1,6 +1,6 @@
 {
-  "name": "Dubai Rate Book",
-  "short_name": "Dubai Rate Book",
+  "name": "Sourcing Ledger",
+  "short_name": "Sourcing Ledger",
   "description": "Dubai supplier invoice rates, tracked automatically.",
   "start_url": "./index.html",
   "display": "standalone",

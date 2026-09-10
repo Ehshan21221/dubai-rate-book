@@ -1,4 +1,4 @@
-# Dubai Rate Book
+# Sourcing Ledger
 
 Tracks what you buy from each Dubai company and at what rate, by reading
 invoice photos automatically.
@@ -66,7 +66,7 @@ git clone https://github.com/<your-username>/dubai-rate-book.git
 cd dubai-rate-book
 # copy in these files (unzip this project into the repo folder), then:
 git add .
-git commit -m "Dubai Rate Book app"
+git commit -m "Sourcing Ledger app"
 git push origin main
 ```
 
