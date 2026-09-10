@@ -234,7 +234,7 @@ Rules:
 - If you truly cannot read the invoice at all, return {"company": "", "items": []}.
 - Output valid JSON only.`;
 
-async function extractInvoiceWithAI(base64, mime) {
+async function callVisionModel(base64, mime) {
   const key = getOpenRouterKey();
   if (!key || key.startsWith("PASTE_")) {
     throw new Error("Add your OpenRouter key in Settings first");
@@ -260,10 +260,25 @@ async function extractInvoiceWithAI(base64, mime) {
   const data = await res.json();
   let text = data.choices?.[0]?.message?.content || "";
   text = text.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+  // The free model rotates and sometimes wraps the JSON in extra commentary —
+  // pull out just the {...} block instead of requiring the whole reply to be clean JSON.
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) text = text.slice(start, end + 1);
   let parsed;
   try { parsed = JSON.parse(text); } catch { throw new Error("AI reply wasn't valid JSON"); }
   if (!parsed || !Array.isArray(parsed.items)) throw new Error("AI reply missing items");
   return parsed;
+}
+
+async function extractInvoiceWithAI(base64, mime) {
+  try {
+    return await callVisionModel(base64, mime);
+  } catch (err) {
+    // The free router picks a different model each call — one retry often
+    // lands on a model that follows the JSON instruction properly.
+    return await callVisionModel(base64, mime);
+  }
 }
 
 // ============================================================
