@@ -54,8 +54,7 @@ let companiesCache = []; // [{id, name, nameLower, itemCount, updatedAt}]
 let currentCompanyId = null;
 let currentCompanyItemsCache = []; // for matching + rendering
 let exchangeRate = 0.10; // sensible fallback until settings load
-let pickedImageBase64 = null;
-let pickedImageMime = null;
+let pickedImages = []; // [{mime, base64, previewUrl}] — one or more invoice photos in the current scan batch
 let reviewRows = []; // working rows in the review screen
 let detailItem = null; // {id, ...data} of item currently open in the detail modal
 
@@ -172,68 +171,125 @@ $("btn-scan").addEventListener("click", () => { resetScan(); switchView("view-sc
 $("btn-scan-back").addEventListener("click", () => switchView("view-home"));
 $("btn-camera").addEventListener("click", () => $("input-camera").click());
 $("btn-gallery").addEventListener("click", () => $("input-gallery").click());
-$("input-camera").addEventListener("change", (e) => handleFile(e.target.files[0]));
-$("input-gallery").addEventListener("change", (e) => handleFile(e.target.files[0]));
+$("btn-camera-2").addEventListener("click", () => $("input-camera").click());
+$("btn-gallery-2").addEventListener("click", () => $("input-gallery").click());
+$("input-camera").addEventListener("change", (e) => handleFiles(e.target.files));
+$("input-gallery").addEventListener("change", (e) => handleFiles(e.target.files));
 $("btn-retake").addEventListener("click", resetScan);
 
 function resetScan() {
-  pickedImageBase64 = null; pickedImageMime = null;
+  pickedImages = [];
   hide("scan-preview-wrap"); hide("scan-loading"); show("scan-drop");
   $("scan-error").textContent = "";
   $("input-camera").value = ""; $("input-gallery").value = "";
+  renderScanThumbs();
 }
 
-function handleFile(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      // Shrink large camera photos before sending — a full-size 4000px+
-      // phone photo can take minutes to upload on a weak connection and
-      // time out. 1600px on the long side is still plenty sharp for reading
-      // invoice text, and uploads in a few seconds instead.
-      const MAX_DIM = 1600;
-      let { width, height } = img;
-      if (width > MAX_DIM || height > MAX_DIM) {
-        const scale = MAX_DIM / Math.max(width, height);
-        width = Math.round(width * scale);
-        height = Math.round(height * scale);
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = width; canvas.height = height;
-      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-      pickedImageMime = "image/jpeg";
-      pickedImageBase64 = dataUrl.split(",")[1];
-      $("scan-preview").src = dataUrl;
-      hide("scan-drop"); show("scan-preview-wrap");
+async function handleFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (files.length === 0) return;
+  for (const file of files) {
+    try {
+      const compressed = await compressImage(file);
+      pickedImages.push(compressed);
+    } catch {
+      // skip a file that fails to load rather than blocking the rest of the batch
+    }
+  }
+  $("input-camera").value = ""; $("input-gallery").value = "";
+  hide("scan-drop"); show("scan-preview-wrap");
+  renderScanThumbs();
+}
+
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        // Shrink large camera photos before sending — a full-size 4000px+
+        // phone photo can take minutes to upload on a weak connection and
+        // time out. 1600px on the long side is still plenty sharp for reading
+        // invoice text, and uploads in a few seconds instead.
+        const MAX_DIM = 1600;
+        let { width, height } = img;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          const scale = MAX_DIM / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        resolve({ mime: "image/jpeg", base64: dataUrl.split(",")[1], previewUrl: dataUrl });
+      };
+      img.onerror = reject;
+      img.src = reader.result;
     };
-    img.onerror = () => { $("scan-error").textContent = "Couldn't load that image. Try a different one."; };
-    img.src = reader.result;
-  };
-  reader.readAsDataURL(file);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderScanThumbs() {
+  const wrap = $("scan-thumbs");
+  wrap.innerHTML = pickedImages.map((img, i) => `
+    <div class="scan-thumb">
+      <img src="${img.previewUrl}" alt="Invoice photo ${i + 1}" />
+      <span class="scan-thumb-count">${i + 1}</span>
+      <button class="scan-thumb-remove" data-idx="${i}">✕</button>
+    </div>`).join("");
+  wrap.querySelectorAll(".scan-thumb-remove").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      pickedImages.splice(parseInt(btn.dataset.idx, 10), 1);
+      if (pickedImages.length === 0) { resetScan(); return; }
+      renderScanThumbs();
+    });
+  });
+  $("btn-analyze").textContent = pickedImages.length > 1 ? `Read ${pickedImages.length} invoices` : "Read this invoice";
 }
 
 $("btn-analyze").addEventListener("click", analyzeInvoice);
 
 async function analyzeInvoice() {
-  if (!pickedImageBase64) return;
+  if (pickedImages.length === 0) return;
   hide("scan-preview-wrap"); show("scan-loading");
   $("scan-error").textContent = "";
-  try {
-    const extracted = await extractInvoiceWithAI(pickedImageBase64, pickedImageMime);
-    if (!extracted.items || extracted.items.length === 0) {
-      hide("scan-loading"); show("scan-preview-wrap");
-      $("scan-error").textContent = "Couldn't find any items on that invoice. Try a clearer, well-lit photo, or a different angle.";
-      return;
+  const mergedItemsByName = new Map(); // nameLower -> item, later scans overwrite earlier ones
+  let mergedCompany = "";
+  let failedCount = 0;
+
+  for (let i = 0; i < pickedImages.length; i++) {
+    if (pickedImages.length > 1) {
+      $("scan-loading-text").textContent = `Reading invoice ${i + 1} of ${pickedImages.length}…`;
     }
-    await openReviewFromExtraction(extracted);
-  } catch (err) {
-    console.error(err);
-    hide("scan-loading"); show("scan-preview-wrap");
-    $("scan-error").textContent = "Couldn't read that invoice: " + (err.message || "unknown error") + ". Try again, or try a clearer photo.";
+    try {
+      const extracted = await extractInvoiceWithAI(pickedImages[i].base64, pickedImages[i].mime);
+      if (extracted.company && !mergedCompany) mergedCompany = extracted.company;
+      (extracted.items || []).forEach((it) => {
+        const key = (it.name || "").trim().toLowerCase();
+        if (key) mergedItemsByName.set(key, it);
+      });
+    } catch (err) {
+      console.error(err);
+      failedCount++;
+    }
   }
+
+  if (mergedItemsByName.size === 0) {
+    hide("scan-loading"); show("scan-preview-wrap");
+    $("scan-error").textContent = failedCount > 0
+      ? "Couldn't read any of those invoices. Try clearer, well-lit photos."
+      : "Couldn't find any items. Try a clearer, well-lit photo, or a different angle.";
+    return;
+  }
+
+  const extracted = { company: mergedCompany, items: Array.from(mergedItemsByName.values()) };
+  if (failedCount > 0) {
+    toast(`Read ${pickedImages.length - failedCount} of ${pickedImages.length} photos OK`);
+  }
+  await openReviewFromExtraction(extracted);
 }
 
 const EXTRACTION_PROMPT = `You are reading a supplier invoice photo from a textile/clothing wholesale business in Dubai, written to a buyer in Oman. Invoices vary a lot — some are clean printed tax invoices, some are handwritten cash memos. Read carefully either way.

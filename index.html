@@ -55,18 +55,22 @@
   <div class="scan-body">
     <div id="scan-drop" class="scan-drop">
       <svg viewBox="0 0 24 24" width="40" height="40"><path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-      <p>Take a photo or choose an invoice image</p>
+      <p>Take a photo, or choose one or more invoice images — from the same company? Pick them all at once.</p>
       <div class="scan-btn-row">
         <button id="btn-camera" class="btn-secondary">Camera</button>
-        <button id="btn-gallery" class="btn-secondary">Choose file</button>
+        <button id="btn-gallery" class="btn-secondary">Choose files</button>
       </div>
       <input id="input-camera" type="file" accept="image/*" capture="environment" class="hidden-input" />
-      <input id="input-gallery" type="file" accept="image/*" class="hidden-input" />
+      <input id="input-gallery" type="file" accept="image/*" multiple class="hidden-input" />
     </div>
     <div id="scan-preview-wrap" class="scan-preview-wrap hidden">
-      <img id="scan-preview" alt="Invoice preview" />
+      <div id="scan-thumbs" class="scan-thumbs"></div>
+      <div class="scan-btn-row">
+        <button id="btn-camera-2" class="btn-secondary">+ Add photo</button>
+        <button id="btn-gallery-2" class="btn-secondary">+ Add files</button>
+      </div>
       <button id="btn-analyze" class="btn-primary btn-wide">Read this invoice</button>
-      <button id="btn-retake" class="btn-text">Choose a different image</button>
+      <button id="btn-retake" class="btn-text">Start over</button>
     </div>
     <div id="scan-loading" class="scan-loading hidden">
       <div class="spinner"></div>

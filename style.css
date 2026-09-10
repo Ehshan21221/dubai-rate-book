@@ -216,14 +216,43 @@ h1, h2 {
 .hidden-input { display: none; }
 
 .scan-preview-wrap { text-align: center; }
-.scan-preview-wrap img {
-  width: 100%;
-  border-radius: var(--radius-m);
+.scan-preview-wrap .scan-btn-row { margin: 16px 0; }
+
+.scan-thumbs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.scan-thumb {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-s);
+  overflow: hidden;
   border: 1px solid var(--line);
-  margin-bottom: 18px;
-  max-height: 60vh;
-  object-fit: contain;
   background: var(--paper-raised);
+}
+.scan-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan-thumb-remove {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(18, 41, 37, 0.72);
+  color: var(--paper-raised);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.scan-thumb-count {
+  position: absolute;
+  bottom: 4px; left: 4px;
+  background: rgba(18, 41, 37, 0.72);
+  color: var(--paper-raised);
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  border-radius: 999px;
 }
 
 .scan-loading { text-align: center; padding: 50px 20px; }

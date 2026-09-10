@@ -4,9 +4,12 @@ Tracks what you buy from each Dubai company and at what rate, by reading
 invoice photos automatically.
 
 ## What it does
-1. Tap **Scan invoice** → take a photo or pick one from your gallery.
-2. The app sends it to an AI vision model that reads the company name and
-   every item + rate (AED) on the invoice.
+1. Tap **Scan invoice** → take a photo, or choose one or more invoice
+   images at once (all from the same company? select them all
+   together — no need to scan-save-scan-save one at a time).
+2. The app reads every photo and merges everything it finds into one
+   list — company name and every item + rate (AED). If the same item
+   name shows up on more than one of the photos, the last one wins.
 3. You see a **review screen** — edit anything the AI got wrong, add a
    margin per item, then tap **Save to ledger**.
 4. New company/item names are created automatically. If an item already
